@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>ArrivalMeetings</AssemblyName>
+    <Version>1.1.1</Version>
+    <Authors>Saelac; ChatGPT</Authors>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <Deterministic>true</Deterministic>
+    <DebugType>none</DebugType>
+    <SilverpineGameDir Condition="'$(SilverpineGameDir)' == ''">$(MSBuildProjectDirectory)\..\..</SilverpineGameDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Tests\**\*.cs" />
+    <Reference Include="BepInEx"><HintPath>$(SilverpineGameDir)\BepInEx\core\BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(SilverpineGameDir)\BepInEx\core\0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Assembly-CSharp"><HintPath>$(SilverpineGameDir)\Silverpine_Data\Managed\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(SilverpineGameDir)\Silverpine_Data\Managed\UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(SilverpineGameDir)\Silverpine_Data\Managed\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(SilverpineGameDir)\Silverpine_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(SilverpineGameDir)\Silverpine_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ModdingTools"><HintPath>$(SilverpineGameDir)\BepInEx\plugins\ModdingTools\ModdingTools.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

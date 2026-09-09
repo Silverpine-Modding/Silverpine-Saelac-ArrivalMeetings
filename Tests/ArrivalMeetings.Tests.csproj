@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoWarn>CS0649;CS0067;CS0414;CS0169;CS9113</NoWarn>
+    <SilverpineGameDir Condition="'$(SilverpineGameDir)' == ''">$(MSBuildProjectDirectory)\..\..\..</SilverpineGameDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\MeetingIntent.cs" Link="MeetingIntent.cs" />
+    <Compile Include="..\MeetingController.cs" Link="MeetingController.cs" />
+    <Compile Include="..\TravelLocations.cs" Link="TravelLocations.cs" />
+    <Compile Include="..\ManualTravel.cs" Link="ManualTravel.cs" />
+    <Compile Include="..\TravelMenu.cs" Link="TravelMenu.cs" />
+    <Reference Include="Mono.Cecil"><HintPath>$(SilverpineGameDir)\BepInEx\core\Mono.Cecil.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>

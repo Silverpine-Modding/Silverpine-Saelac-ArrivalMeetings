@@ -21,6 +21,8 @@ NeuralNPC Make(NPCName id, string name, int x)
 (NeuralNPC owner, NeuralNPC alice, NeuralNPC bob) World()
 {
     TravelMenu.Cancel();
+    ParticipantMenu.Cancel();
+    ParticipantExchange.Cancel();
     ManualTravel.OnConversationReset();
     MeetingController.Reset();
     Plugin.EnabledSetting.Value = Plugin.Automatic.Value = Plugin.BringAbsent.Value = true;
@@ -216,6 +218,7 @@ Check(MeetingController.AddGuests(a, new[] { world.alice }) == 0 && world.alice.
     world.alice.GetComponent<NPCRoutineExecutor>().currentRoutine.Activity == "base", "guest setup failure restores original position and routine");
 
 await TravelChecks.Run(Check, World);
+await ParticipantChecks.Run(Check, World);
 
 // Inspect the real game DLL too: stubs cannot prove compatibility of private reflection hooks.
 if (args.Length != 1) throw new ArgumentException("Pass the Silverpine root directory.");
@@ -234,4 +237,7 @@ Check(Type("MapZone").Fields.Any(f => f.Name == "registered" && f.IsStatic), "na
 Check(Type("Plot").Fields.Any(f => f.Name == "owners") && Type("Plot").Fields.Any(f => f.Name == "bounds"), "native property ownership and boundaries exist");
 Check(Type("GenericListUI").Methods.Any(m => m.Name == "Draw" && m.Parameters.Count == 1) && Type("GenericListUI").Methods.Any(m => m.Name == "Close"),
     "native debug-style menu draw/close integration points exist");
+Check(Type("DialogBox").Fields.Any(f => f.Name == "isNPCDIalog"), "native NPC dialogue mode flag exists");
+Check(Type("NeuralNPC").Methods.Any(m => m.Name == "DisplayMultiDialogText" && m.IsStatic && m.Parameters.Count == 3) &&
+    Type("NeuralNPC").Methods.Any(m => m.Name == "DisplayDialogText" && m.Parameters.Count == 1), "native portrait and input refresh methods exist");
 Console.WriteLine($"{passed} checks passed. Unity rendering, live model intent quality, and live dialogue transitions still require an in-game smoke test.");

@@ -28,7 +28,7 @@ internal static class ManualTravel
             lockRevision = -1;
         }
     }
-    internal static bool CanOffer => MeetingController.WorldReady && !Busy;
+    internal static bool CanOffer => MeetingController.WorldReady && !Busy && !ParticipantExchange.Busy;
     internal static bool CanStart => CanOffer && !NeuralNPC.npcFunctionsBeingInvoked &&
         !DialogBox.Instance.isAnimatingText && !SaveUI.Instance.IsSavingBlocked() &&
         MeetingController.Participants().All(n => n.GetComponent<EntityMover>() != null &&

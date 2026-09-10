@@ -210,11 +210,13 @@ internal sealed class TravelMenu
 [HarmonyPatch(typeof(GenericListUI), nameof(GenericListUI.Close))]
 internal static class TravelListClosePatch
 {
-    private static void Postfix(GenericListUI __instance) => TravelMenu.OnNativeClose(__instance);
+    private static void Postfix(GenericListUI __instance)
+    { TravelMenu.OnNativeClose(__instance); ParticipantMenu.OnNativeClose(__instance); }
 }
 
 [HarmonyPatch(typeof(GenericListUI), nameof(GenericListUI.Draw))]
 internal static class TravelListDrawPatch
 {
-    private static void Prefix(GenericListUI __instance) => TravelMenu.OnNativeDraw(__instance);
+    private static void Prefix(GenericListUI __instance)
+    { TravelMenu.OnNativeDraw(__instance); ParticipantMenu.OnNativeDraw(__instance); }
 }

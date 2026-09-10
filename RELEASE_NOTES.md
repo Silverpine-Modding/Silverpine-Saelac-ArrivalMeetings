@@ -1,7 +1,18 @@
-# Arrival Meetings 1.1.1
+# Arrival Meetings 1.2.0
 
 Arrival Meetings adds NPCs to an ongoing conversation after dialogue travel and
 provides a Travel action for choosing the destination and exact arrival guests.
+
+## New in 1.2.0
+
+- A separate **Participants** conversation button adds nearby visible NPCs and removes current participants, without requiring travel.
+- Check the NPCs who should stay or join, then apply the changes. Canceling the selection leaves the conversation unchanged.
+- Newcomers give a brief greeting. Departing NPCs give a farewell before leaving. These lines use each NPC's full native character and memory prompt through the existing dialogue model.
+- Read each line with **Continue**. Cancel remaining changes at any point, including while generation is pending.
+- Removing the active speaker transfers the conversation to someone remaining. Removing everyone ends the native dialogue after the last farewell.
+- Removed NPCs stop receiving future conversation turns; rejoining preserves what they actually heard and native cleanup runs once at dialogue end.
+
+## Included
 
 - Bring intended NPCs to the destination and include them in the native multi-NPC conversation.
 - Travel with the current conversation group using the game's native list menu.
@@ -21,9 +32,9 @@ Keep a single installed copy of `ArrivalMeetings.dll`, then restart the game.
 
 ## Validation
 
-Release build completed with no warnings or errors. All 111 automated checks
+Release build completed with no warnings or errors. All 146 automated checks
 passed, including travel, native menu flow, shared-tile placement, conversation
-membership, cancellation, and game API compatibility. Unity rendering and live
+membership, greetings/farewells, cancellation, and game API compatibility. Unity rendering and live
 dialogue behavior still need in-game testing.
 
 Created by Saelac and ChatGPT.

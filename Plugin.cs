@@ -16,7 +16,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "Saelac.Silverpine.ArrivalMeetings";
     public const string PluginName = "Arrival Meetings";
-    public const string PluginVersion = "1.1.1";
+    public const string PluginVersion = "1.2.0";
     internal static ManualLogSource Log = null!;
     internal static ConfigEntry<bool> EnabledSetting = null!, Automatic = null!, BringAbsent = null!;
     internal static ConfigEntry<int> MaxGuests = null!, HistoryLength = null!, StayTurns = null!;
@@ -34,6 +34,12 @@ public sealed class Plugin : BaseUnityPlugin
             (_, session) => SettingsWindow.Open(session), order: 320);
         InventoryModTools.RegisterSession(PluginGuid + ".settings-ingame", PluginName,
             (_, session) => SettingsWindow.Open(session), order: 320);
+        DialogueActions.Register(PluginGuid, new DialogueActionDefinition
+        {
+            Id = PluginGuid + ".participants", Label = "Participants", Order = 100,
+            IsVisible = _ => ParticipantController.CanOffer,
+            OnSelected = _ => ParticipantMenu.Open()
+        });
         DialogueActions.Register(PluginGuid, new DialogueActionDefinition
         {
             Id = PluginGuid + ".meet", Label = "Meet on arrival", Order = 120,
@@ -82,6 +88,8 @@ internal static class ConversationBoundaryPatch
     private static void Prefix()
     {
         TravelMenu.Cancel(restoreConversation: false);
+        ParticipantMenu.Cancel(restoreConversation: false);
+        ParticipantExchange.Cancel();
         ManualTravel.OnConversationReset();
         MeetingController.Reset();
     }
@@ -101,7 +109,7 @@ internal static class ConvertedInputPatch
 {
     private static bool Prefix(NeuralNPC __instance, string text)
     {
-        if (!MeetingController.OwnsGroup || NeuralNPC.multiDialogParticipants?.Contains(__instance) != true) return true;
+        if (!MeetingController.OwnsGroup || (NeuralNPC.multiDialogParticipants?.Count ?? 0) < 1) return true;
         NeuralNPC.OnMultiInputCallback(null, text);
         return false;
     }

@@ -1,4 +1,4 @@
-# Arrival Meetings 1.1.1
+# Arrival Meetings 1.2.0
 
 [Download the latest release](https://github.com/Silverpine-Modding/Silverpine-Saelac-ArrivalMeetings/releases/latest)
 
@@ -7,11 +7,48 @@ conversation to a different room or building, people the group intended to meet
 can join that same conversation. An intended NPC who is elsewhere in the loaded
 world can be brought to the destination. Version 1.1 adds player-controlled travel
 from the conversation menu, with rooms grouped by property owner and explicit
-meeting guest selection.
+meeting guest selection. Version 1.2 adds a separate Participants action for
+nearby invitations and removals, with character-generated greetings and farewells.
 
 Created by Saelac and ChatGPT.
 
 ## Use
+
+### Manage the active conversation
+
+Open **Participants** in the conversation action menu. This is separate from
+**Travel** and **Meet on arrival** and works before any location change.
+
+- Current participants start checked. Uncheck someone to remove them.
+- Nearby visible NPCs start unchecked. Check someone to invite them.
+- Choose **Apply changes** to begin the greetings and farewells, or **Cancel**
+  to leave the conversation unchanged.
+
+Nearby uses the same range as the existing conversation picker: within two
+tiles horizontally and vertically of the player or current speaker, and visible
+to the current speaker. Inviting someone does not teleport them, require a free
+tile, or count against the arrival-specific guest cap.
+
+Each newcomer gives a short, generated greeting using their full native character
+and memory context. Each departing NPC gives a generated farewell while still
+in the conversation. Use **Continue** to read each line before the next change.
+Removing everyone is labeled **Apply changes — end conversation**; the last
+farewell finishes before the game closes the dialogue.
+
+**Cancel remaining changes** stops an exchange, including while waiting for the
+model. Already completed changes remain in place. If generation fails, the menu
+explains this and lets you continue the change without inventing dialogue.
+These short turns use the existing model connection and do not invoke game actions.
+
+Removing the displayed speaker switches to a remaining participant. Departed
+NPCs stop receiving subsequent conversation turns. Rejoining NPCs keep only the
+history they actually heard, and native cleanup runs once when the whole dialogue
+ends. Each invitation and departure is recorded in the conversation context.
+
+Use the game's **Interrupt** action to return to player input before opening
+Participants from an automatic NPC turn. Changes are unavailable during model
+work, combat, or forced encounters. Saving is temporarily blocked while reading
+an entrance/farewell exchange and restored when it finishes or is canceled.
 
 ### Manual conversation travel
 
@@ -138,7 +175,7 @@ Requires BepInEx 5, Silverpine 1.7.3, and
 [**Modding Tools 1.9.3 or newer**](https://github.com/Silverpine-Modding/Silverpine-Saelac-Modding-Tools/releases)
 (developed against installed 1.10.2).
 
-Download `ArrivalMeetings-1.1.1.zip` from the release page, close Silverpine, and
+Download `ArrivalMeetings-1.2.0.zip` from the release page, close Silverpine, and
 extract its `ArrivalMeetings` folder into `BepInEx/plugins/`. Alternatively, place
 the standalone `ArrivalMeetings.dll` and this README under:
 
@@ -148,7 +185,7 @@ BepInEx/plugins/ArrivalMeetings/
 
 Keep the single existing Modding Tools installation. This release does not
 bundle another framework DLL, game DLL, or BepInEx DLL. Start/restart Silverpine
-to load the plugin. Its BepInEx log entry is **Arrival Meetings 1.1.1 loaded**.
+to load the plugin. Its BepInEx log entry is **Arrival Meetings 1.2.0 loaded**.
 
 Configuration is created on first startup at:
 
@@ -197,6 +234,9 @@ Travel checks also cover property categories, custom rooms, connected formations
 stacking in one-tile and occupied rooms, character versus scenery colliders,
 No/Yes meeting choices, exact guest selection, native menu cancellation/takeover,
 stale callbacks, mid-fade changes, and party rollback.
+Participant checks cover nearby visibility, active-speaker removal, final-NPC
+cleanup, rejoining, private history, native menu lifecycle, generated greetings
+and farewells, model failure, cancellation, and stale model responses.
 They do not run Unity rendering or a live dialogue model.
 
 ### In-game smoke check
@@ -221,6 +261,13 @@ They do not run Unity rendering or a live dialogue model.
    guest joins, and both existing and new participants can speak normally.
 9. Travel to a one-tile room with an existing group and an absent guest. Verify
    they share the tile, including when another NPC already occupies it.
+10. Open Participants without traveling, select a nearby NPC, and apply. Read
+    their greeting and continue; verify both NPCs can take subsequent turns.
+11. Remove the displayed speaker. Verify their farewell appears before Continue
+    removes them, then the remaining NPC takes over. Remove the last NPC and
+    verify their farewell completes before the dialogue closes.
+12. Cancel a greeting/farewell while the model is generating. Verify later model
+    output does not replace the conversation and saving becomes available again.
 
 Static registrations and Harmony patches deliberately survive destruction of
 BepInEx's bootstrap plugin host, as required by Silverpine's plugin lifetime.

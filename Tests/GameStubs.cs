@@ -22,6 +22,7 @@ namespace HarmonyLib
     public static class AccessTools
     {
         public static FieldInfo Field(Type type, string name) => type.GetField(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)!;
+        public static MethodInfo Method(Type type, string name) => type.GetMethod(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)!;
     }
 }
 namespace UnityEngine
@@ -72,12 +73,22 @@ public class NeuralNPC : MonoBehaviour
     public Action? OnBeforeDialogBegins;
     public string GetFinalName() => Name;
     public bool IsCustomNPC() => Custom;
-    public void ReleaseLargeAssets() { }
-    public bool CanSeeTransform(Transform transform) => true;
+    public int Releases, Cleanups, PortraitSwitches;
+    public Func<Transform, bool> Visible = _ => true;
+    public void ReleaseLargeAssets() { Releases++; }
+    public bool CanSeeTransform(Transform transform) => Visible(transform);
+    public void DoStartNPCMode(DialogBox.SpriteSwitchMode mode) { PortraitSwitches++; }
+    private static void DisplayMultiDialogText(NeuralNPC speaker, NeuralNPC? nextSpeaker, string text)
+    { speaker.DoStartNPCMode(DialogBox.SpriteSwitchMode.Normal); DialogBox.Instance.DisplayText(text, s => OnMultiInputCallback(nextSpeaker, s), new()); }
+    private void DisplayDialogText(string text) => DialogBox.Instance.DisplayText(text, s => dialogElements.Add(new(SpeakerType.Player, s)), new());
+    public static void OnMultiInputCallback(NeuralNPC? nextSpeaker, string text)
+    { foreach (var history in multiDialogParticipants!.Select(n => n.dialogElements).Distinct()) history.AddToDialog(SpeakerType.Player, text); }
     public Func<Task<string>> Answer = () => Task.FromResult("NONE");
     public int Questions;
+    public int LastTakes;
+    public string LastQuestion = "";
     public Task<string> AskQuestion(string question, bool deterministic, int takes, string grammar, List<DialogElement> targetDialogElements)
-    { Questions++; return Answer(); }
+    { Questions++; LastTakes = takes; LastQuestion = question; return Answer(); }
     public static string ToAnd(List<string> list) => string.Join(" and ", list);
     public class DialogElement(SpeakerType speaker, string contents)
     { public SpeakerType speakerType = speaker; public string contents = contents; }
@@ -93,10 +104,32 @@ public class Player : MonoBehaviour
 public class DialogBox
 {
     public static DialogBox Instance = new(); public bool isOpen = true, isAnimatingText;
+    private bool isNPCDIalog = true;
     public bool TalkAllowed = true;
+    public enum SpriteSwitchMode { Normal, Instant }
+    public string Text = "";
+    public Action<string>? Input;
+    public List<DialogOption> Options = new();
+    public int Ends;
+    public void SetNotificationMode() => isNPCDIalog = false;
+    public void DisplayText(string text, Action<string> input, List<UpperButtonOption> buttons)
+    { Text = text; Input = input; Options.Clear(); }
+    public void DisplayTextNoDialog(string text, params DialogOption[] options) { Text = text; Options = options.ToList(); }
     public bool IsEndDialogAllowed(NeuralNPC npc) => !npc.Locked;
     public void StopContinueOnlyMode() { } public void SetTalkAllowedState(bool state) { TalkAllowed = state; }
+    public void EndDialog()
+    {
+        Ends++;
+        foreach (var npc in NeuralNPC.initialMultiDialogParticipants ?? ArrivalMeetings.MeetingController.Participants()) { npc.Cleanups++; npc.ReleaseLargeAssets(); }
+        isOpen = false;
+        NeuralNPC.multiDialogParticipants = NeuralNPC.initialMultiDialogParticipants = null;
+        ArrivalMeetings.ParticipantExchange.Cancel(); ArrivalMeetings.ParticipantMenu.Cancel(false);
+        ArrivalMeetings.MeetingController.Reset();
+    }
 }
+public class UpperButtonOption { }
+public class DialogOption(string label, Action callback, bool endDialog = true)
+{ public string label = label; public Action callback = callback; }
 public static class SerializationManager { public static bool loadingSave; }
 public class DungeonGenerationManager { public static DungeonGenerationManager Instance = new(); public bool playerInInstance; }
 public class SaveUI
@@ -176,9 +209,9 @@ public class ListUIItem_Generic(string name, Sprite icon, string suffix, Action 
 public class GenericListUI : MonoBehaviour
 {
     public static GenericListUI Instance = new(); public List<ListUIItem_Generic> Rows = new();
-    public void Draw(IEnumerable<ListUIItem_Generic> rows) { ArrivalMeetings.TravelMenu.OnNativeDraw(this); Rows = rows.ToList(); }
+    public void Draw(IEnumerable<ListUIItem_Generic> rows) { ArrivalMeetings.TravelMenu.OnNativeDraw(this); ArrivalMeetings.ParticipantMenu.OnNativeDraw(this); Rows = rows.ToList(); }
     public void Open() => gameObject.activeSelf = true;
-    public void Close() { gameObject.activeSelf = false; ArrivalMeetings.TravelMenu.OnNativeClose(this); }
+    public void Close() { gameObject.activeSelf = false; ArrivalMeetings.TravelMenu.OnNativeClose(this); ArrivalMeetings.ParticipantMenu.OnNativeClose(this); }
 }
 public class CustomContentDefinition_NPC
 {

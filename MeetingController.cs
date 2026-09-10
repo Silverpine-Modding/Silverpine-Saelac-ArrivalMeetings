@@ -80,7 +80,7 @@ internal static class MeetingController
         Player.Instance.transform.GetVector2IntPosition() == arrival.At &&
         MapZone.GetPositionZoneName(arrival.At) == arrival.Destination;
 
-    internal static bool CanOffer => IsCurrent(Current) && Current!.Added < Plugin.MaxGuests.Value;
+    internal static bool CanOffer => !ParticipantExchange.Busy && IsCurrent(Current) && Current!.Added < Plugin.MaxGuests.Value;
     internal static bool CanSelect => CanOffer && !NeuralNPC.npcFunctionsBeingInvoked &&
         !DialogBox.Instance.isAnimatingText && !SaveUI.Instance.IsSavingBlocked();
 
@@ -132,14 +132,41 @@ internal static class MeetingController
 
     internal static bool Eligible(NeuralNPC npc, Arrival arrival)
     {
+        return EligibleCharacter(npc) && !arrival.Travelers.Contains(npc) && !Participants().Contains(npc) &&
+            (Plugin.BringAbsent.Value || MapZone.GetPositionZoneName(npc.transform.GetVector2IntPosition()) == arrival.Destination);
+    }
+
+    internal static bool EligibleCharacter(NeuralNPC npc)
+    {
         if (npc == null || !npc.isActiveAndEnabled || !npc.gameObject.scene.IsValid() ||
-            !NeuralNPC.neuralNPCs.TryGetValue(npc.npcName, out var registered) || registered != npc ||
-            arrival.Travelers.Contains(npc) || Participants().Contains(npc)) return false;
+            !NeuralNPC.neuralNPCs.TryGetValue(npc.npcName, out var registered) || registered != npc) return false;
         var routine = npc.GetComponent<NPCRoutineExecutor>();
         if (npc.GetComponent<EntityMover>() == null || routine == null || routine.currentRoutine == null ||
             !DialogBox.Instance.IsEndDialogAllowed(npc)) return false;
         if (npc.npcName == NPCName.Acacia && !Chainloader.PluginInfos.ContainsKey("salt.silverpine.acaciaunlocked")) return false;
-        return Plugin.BringAbsent.Value || MapZone.GetPositionZoneName(npc.transform.GetVector2IntPosition()) == arrival.Destination;
+        return true;
+    }
+
+    internal static void IncludeParticipant(NeuralNPC npc)
+    {
+        if (Participants().Contains(npc)) return;
+        GuestLifecycle.Begin(npc);
+        if (NeuralNPC.multiDialogParticipants == null) NeuralNPC.multiDialogParticipants = Participants();
+        if (NeuralNPC.initialMultiDialogParticipants == null)
+            NeuralNPC.initialMultiDialogParticipants = new List<NeuralNPC>(NeuralNPC.multiDialogParticipants);
+        if (!NeuralNPC.initialMultiDialogParticipants.Contains(npc)) NeuralNPC.initialMultiDialogParticipants.Add(npc);
+        NeuralNPC.multiDialogParticipants.Add(npc);
+        OwnsGroup = true;
+        foreach (NeuralNPC participant in Participants()) participant.lastDialogWasMulti = true;
+    }
+
+    internal static void OnParticipantsChanged()
+    {
+        generation++;
+        ConversationRevision++;
+        Current = null;
+        RefreshPending = false;
+        OwnsGroup = true;
     }
 
     internal static List<NeuralNPC> Candidates(Arrival arrival, bool mentionedOnly)
@@ -195,14 +222,7 @@ internal static class MeetingController
                 meetingRoutine = new NPCRoutine(activity, activity, activity, target,
                     new RoutineArgument_EndOverrideIf_Overridden(), new RoutineArgument_EndOverrideIf_AfterTurns(Plugin.StayTurns.Value));
                 executor.StartOverrideRoutine(meetingRoutine);
-                GuestLifecycle.Begin(npc);
-                if (NeuralNPC.multiDialogParticipants == null)
-                    NeuralNPC.multiDialogParticipants = Participants();
-                if (NeuralNPC.initialMultiDialogParticipants == null)
-                    NeuralNPC.initialMultiDialogParticipants = new List<NeuralNPC>(NeuralNPC.multiDialogParticipants);
-                if (!NeuralNPC.initialMultiDialogParticipants.Contains(npc)) NeuralNPC.initialMultiDialogParticipants.Add(npc);
-                NeuralNPC.multiDialogParticipants.Add(npc);
-                OwnsGroup = true;
+                IncludeParticipant(npc);
                 arrival.Added++;
                 added.Add(npc);
             }
@@ -251,6 +271,9 @@ internal static class GuestLifecycle
 {
     internal static void Prepare(NeuralNPC npc)
     {
+        // Native group cleanup retains departed members until the whole dialogue ends.
+        // Rejoining the same scene reuses their loaded portrait and entry bookkeeping.
+        if (NeuralNPC.initialMultiDialogParticipants?.Contains(npc) == true) return;
         Sprite? portrait;
         if (CustomContentDefinition_NPC.loaded.TryGetValue(npc.GetFinalName(), out var definition) && definition.enabled &&
             (npc.IsCustomNPC() || definition.overrideExisting) &&
@@ -271,6 +294,7 @@ internal static class GuestLifecycle
 
     internal static void Begin(NeuralNPC npc)
     {
+        if (NeuralNPC.initialMultiDialogParticipants?.Contains(npc) == true) return;
         // Match native group-entry bookkeeping without TriggerMultiDialog, which starts a new scene for everyone.
         var mover = npc.GetComponent<EntityMover>();
         Set(npc, "preDialogVisualDirection", mover.currentVisualDirection);

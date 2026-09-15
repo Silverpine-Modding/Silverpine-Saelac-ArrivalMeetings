@@ -16,6 +16,7 @@
     <Compile Include="..\ParticipantController.cs" Link="ParticipantController.cs" />
     <Compile Include="..\ParticipantMenu.cs" Link="ParticipantMenu.cs" />
     <Compile Include="..\ParticipantExchange.cs" Link="ParticipantExchange.cs" />
+    <Compile Include="..\ListMenuChrome.cs" Link="ListMenuChrome.cs" />
     <Reference Include="Mono.Cecil"><HintPath>$(SilverpineGameDir)\BepInEx\core\Mono.Cecil.dll</HintPath></Reference>
   </ItemGroup>
 </Project>

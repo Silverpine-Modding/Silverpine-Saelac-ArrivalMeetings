@@ -1,14 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
+using HarmonyLib;
 using System.Threading.Tasks;
 using UnityEngine;
 
 namespace ArrivalMeetings;
 
 // One controlled speaking turn per entering/departing NPC, with Continue between speakers.
-// AskQuestion(takes: -1) uses the NPC's full native character/memory prompt without running game actions.
+// Use the game's dialogue generator and native NPC display. Only turn scheduling
+// belongs to this exchange; Continue must finish the line before removing its speaker.
 internal sealed class ParticipantExchange
 {
     private static ParticipantExchange? active;
@@ -24,6 +25,9 @@ internal sealed class ParticipantExchange
     private int revision = MeetingController.ConversationRevision;
     private readonly TaskCompletionSource<bool> canceled = new();
     private bool saveBlocked;
+    private TaskCompletionSource<bool>? rendering, waitingForContinue;
+    private string lastLine = "";
+    private NeuralNPC? lastSpeaker;
 
     private ParticipantExchange(List<NeuralNPC> original, List<NeuralNPC> selection, List<NeuralNPC> candidates)
     { expected = original; desired = selection; nearby = candidates; }
@@ -88,7 +92,7 @@ internal sealed class ParticipantExchange
             Unlock();
             if (restore)
             {
-                ParticipantController.Refresh(finalText);
+                ParticipantController.Refresh(lastSpeaker == NeuralNPC.currentActiveDialogNeuralNPC && lastLine.Length > 0 ? lastLine : finalText);
                 box.SetTalkAllowedState(true);
             }
         }
@@ -106,21 +110,39 @@ internal sealed class ParticipantExchange
         string instruction = "Present participants: " + roster + ". " +
             (farewell ? "You are leaving this conversation now. Give a brief, in-character farewell before stepping out of the discussion. " :
                 "You have just joined this conversation. Give a brief, in-character greeting or entrance. You did not hear discussion while you were absent. ") +
-            "Write only " + npc.GetFinalName() + "'s spoken line and optional brief action, in the same language as the conversation, at most two sentences. " +
+            "Write only " + npc.GetFinalName() + "'s spoken line and optional brief action, at most two sentences. " +
             "Do not speak for others, start new activities, request game actions, or move the group to another location.";
         string text;
         bool generated = false;
+        string historyText = "";
+        var history = npc.dialogElements;
+        var cue = history.AddToDialog(SpeakerType.System, instruction);
         try
         {
-            Task<string> request = npc.AskQuestion(instruction, deterministic: false, takes: -1,
-                grammar: "", targetDialogElements: new List<NeuralNPC.DialogElement>(npc.dialogElements));
+            // Generate is the same awaitable dialogue path used by GenerateDialog /
+            // GenerateMultiDialog, including model settings, memory and character context.
+            Task<string> request = (Task<string>)AccessTools.Method(typeof(NeuralNPC), "Generate")
+                .Invoke(npc, new object[] { false })!;
             // Observe a late request failure even when its scene was canceled while awaiting the model.
             _ = request.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
             if (await Task.WhenAny(request, canceled.Task) != request || !Valid) return false;
             text = await request;
-            text = Regex.Replace(text, @"<[^>]*>.*?</[^>]*>|<[^>]*>", "", RegexOptions.Singleline).Trim();
+            text = (string)AccessTools.Method(typeof(NeuralNPC), "RemoveToolTags").Invoke(null, new object[] { text })!;
             if (string.IsNullOrWhiteSpace(text)) throw new InvalidOperationException("The dialogue model returned an empty line.");
-            if (!text.StartsWith(npc.GetFinalName() + ":", StringComparison.OrdinalIgnoreCase)) text = npc.GetFinalName() + ": " + text;
+            historyText = (string)AccessTools.Method(typeof(NeuralNPC), "TransformTextForGenerateDialog").Invoke(npc, new object[] { text })!;
+            text = historyText;
+            string translation = "";
+            if (SettingsUI.Instance.GetDialogLanguage() != Language.English)
+            {
+                string context = history.LastOrDefault(d => d.speakerType == SpeakerType.Player || d.speakerType == SpeakerType.NPC)?.GetNamedContents() ?? "";
+                Task<string> translating = InferenceServerSetupHandler.Instance.Translate(context, npc.GetFinalName(),
+                    text.Replace(npc.GetFinalName() + ": ", ""), SettingsUI.Instance.GetDialogLanguage());
+                _ = translating.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+                if (await Task.WhenAny(translating, canceled.Task) != translating || !Valid) return false;
+                translation = npc.GetFinalName() + ": " + await translating;
+                text = translation;
+            }
+            AccessTools.Field(typeof(NeuralNPC), "lastTranslation").SetValue(npc, translation);
             generated = true;
         }
         catch (Exception ex)
@@ -128,15 +150,47 @@ internal sealed class ParticipantExchange
             Plugin.Log.LogWarning("Could not generate " + npc.GetFinalName() + "'s " + kind + ": " + ex);
             text = "A " + kind + " could not be generated for " + npc.GetFinalName() + ". Continue to complete the participant change.";
         }
+        finally { history.Remove(cue); }
         if (!Valid) return false;
         if (generated)
-            foreach (var history in expected.Select(n => n.dialogElements).Distinct()) history.AddToDialog(SpeakerType.NPC, text);
+            foreach (var listenerHistory in expected.Select(n => n.dialogElements).Distinct()) listenerHistory.AddToDialog(SpeakerType.NPC, historyText);
         var continued = new TaskCompletionSource<bool>();
-        box.DisplayTextNoDialog(text,
-            new DialogOption(farewell ? "Continue — let " + npc.GetFinalName() + " leave" : "Continue", () => continued.TrySetResult(true), endDialog: false),
-            new DialogOption("Cancel remaining changes", () => Cancel(restore: true), endDialog: false));
+        waitingForContinue = rendering = continued;
+        lastSpeaker = npc;
+        lastLine = text;
+        try
+        {
+            AccessTools.Method(typeof(NeuralNPC), "DisplayMultiDialogText").Invoke(null, new object?[] { npc, null, text });
+        }
+        finally { rendering = null; }
         await Task.WhenAny(continued.Task, canceled.Task);
+        if (waitingForContinue == continued) waitingForContinue = null;
         return Valid && continued.Task.IsCompleted;
+    }
+
+    // Modify just our native DisplayText call. Other dialogue retains its own callbacks.
+    internal static void ConfigureDisplay(DialogBox box, ref Action<string> input, ref Action? finished)
+    {
+        var exchange = active;
+        var continued = exchange?.rendering;
+        if (exchange == null || continued == null || !exchange.Valid || exchange.box != box) return;
+        input = _ =>
+        {
+            if (!exchange.Valid || box.isAnimatingText || continued.Task.IsCompleted) return;
+            box.SetTalkAllowedState(false);
+            continued.TrySetResult(true);
+        };
+        finished = () =>
+        {
+            if (!exchange.Valid || exchange.waitingForContinue != continued) return;
+            box.StartContinueOnlyMode();
+            box.SetTalkAllowedState(true);
+        };
+    }
+
+    internal static void OnInterrupt()
+    {
+        if (active?.waitingForContinue != null) Cancel(restore: true);
     }
 
     private void Unlock()
@@ -152,8 +206,22 @@ internal sealed class ParticipantExchange
         exchange.Unlock();
         if (restore && valid)
         {
-            ParticipantController.Refresh("Remaining participant changes canceled. The conversation continues.");
+            ParticipantController.Refresh(exchange.lastSpeaker == NeuralNPC.currentActiveDialogNeuralNPC && exchange.lastLine.Length > 0
+                ? exchange.lastLine : "Remaining participant changes canceled. The conversation continues.");
             exchange.box.SetTalkAllowedState(true);
         }
     }
+}
+
+[HarmonyPatch(typeof(DialogBox), nameof(DialogBox.DisplayText))]
+internal static class ParticipantSpeechDisplayPatch
+{
+    private static void Prefix(DialogBox __instance, ref Action<string> inputCallback, ref Action? finishedAnimatingCallback) =>
+        ParticipantExchange.ConfigureDisplay(__instance, ref inputCallback, ref finishedAnimatingCallback);
+}
+
+[HarmonyPatch(typeof(DialogBox), nameof(DialogBox.StopContinueOnlyMode))]
+internal static class ParticipantSpeechInterruptPatch
+{
+    private static void Postfix() => ParticipantExchange.OnInterrupt();
 }

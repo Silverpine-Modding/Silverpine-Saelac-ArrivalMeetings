@@ -21,6 +21,7 @@ internal sealed class TravelMenu
     private readonly List<NeuralNPC> travelers;
     private readonly List<TravelDestination> destinations;
     private readonly HashSet<NeuralNPC> selected = new();
+    private readonly ListMenuChrome chrome = new();
     private TravelDestination? destination;
     private string owner = "";
     private bool meet;
@@ -80,7 +81,7 @@ internal sealed class TravelMenu
         if (!Valid) { if (active == this) Cancel(); return; }
         rows.Add(Row("Cancel travel / return to conversation", () => Cancel()));
         drawing = true;
-        try { list.Draw(rows); list.Open(); }
+        try { list.Draw(rows); chrome.HideDebugClose(list); list.Open(); }
         finally { drawing = false; }
     }
 
@@ -176,6 +177,7 @@ internal sealed class TravelMenu
         { ShowReview(error); return; }
         active = null; // Native Close now belongs to the committed operation; do not unlock dialogue early.
         list.Close();
+        chrome.Restore();
         try { await ManualTravel.Execute(plan!); }
         catch (Exception ex) { Plugin.Log.LogWarning("Manual travel failed unexpectedly: " + ex); }
         finally
@@ -191,6 +193,7 @@ internal sealed class TravelMenu
         if (menu == null) return;
         active = null;
         if (closeList && menu.list != null) menu.list.Close();
+        menu.chrome.Restore();
         if (restoreConversation && menu.revision == MeetingController.ConversationRevision && menu.box != null &&
             menu.box == DialogBox.Instance && menu.box.isOpen && !NeuralNPC.npcFunctionsBeingInvoked && !SaveUI.Instance.IsSavingBlocked())
             menu.box.SetTalkAllowedState(true);

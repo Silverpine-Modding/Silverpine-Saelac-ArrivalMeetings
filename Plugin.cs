@@ -16,7 +16,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "Saelac.Silverpine.ArrivalMeetings";
     public const string PluginName = "Arrival Meetings";
-    public const string PluginVersion = "1.2.0";
+    public const string PluginVersion = "1.2.1";
     internal static ManualLogSource Log = null!;
     internal static ConfigEntry<bool> EnabledSetting = null!, Automatic = null!, BringAbsent = null!;
     internal static ConfigEntry<int> MaxGuests = null!, HistoryLength = null!, StayTurns = null!;

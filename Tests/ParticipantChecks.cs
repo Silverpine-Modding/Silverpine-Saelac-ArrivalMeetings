@@ -7,7 +7,7 @@ internal static class ParticipantChecks
     {
         bool Apply(params NeuralNPC[] selected) => ParticipantController.Apply(MeetingController.Participants(), selected, out _);
         void Click(string label) => GenericListUI.Instance.Rows.Single(r => r.name == label).callback();
-        void Continue() => DialogBox.Instance.Options.Single(o => o.label.StartsWith("Continue")).callback();
+        void Continue() => DialogBox.Instance.Input!("");
         var w = world();
         check(ParticipantController.CanOffer && MeetingController.Current == null, "Participants is available before any location arrival");
         w.alice.transform.Position = new(2, 2); w.bob.transform.Position = new(3, 0);
@@ -51,14 +51,22 @@ internal static class ParticipantChecks
 
         w = world(); w.alice.transform.Position = new(1, 0);
         ParticipantMenu.Open(); Click("[ ] Alice Vale");
+        check(GenericListUI.Instance.gameObject.activeSelf && !GenericListUI.Instance.DebugClose.activeSelf,
+            "Participants keeps the native list window and hides the leftover Salt Extra Debug X");
         check(GenericListUI.Instance.Rows.Single(r => r.name == "Apply changes").suffix == "1 to add, 0 to remove",
             "participant menu previews selected additions and removals");
         Click("Cancel / return to conversation");
+        check(GenericListUI.Instance.DebugClose.activeSelf, "Cancel restores the debug control when releasing the shared list");
+        GenericListUI.Instance.DebugClose.SetActive(false);
+        ParticipantMenu.Open(); Click("Cancel / return to conversation");
+        check(!GenericListUI.Instance.DebugClose.activeSelf, "a debug X that was already hidden stays hidden after Cancel");
+        GenericListUI.Instance.DebugClose.SetActive(true);
         check(MeetingController.Participants().Count == 1 && DialogBox.Instance.TalkAllowed, "canceling participant selection leaves the roster unchanged");
         ParticipantMenu.Open(); GenericListUI.Instance.Close();
         check(DialogBox.Instance.TalkAllowed, "closing the native participant list restores dialogue input");
         ParticipantMenu.Open();
         GenericListUI.Instance.Draw(new[] { new ListUIItem_Generic("Debug", null!, "", () => { }) });
+        check(GenericListUI.Instance.DebugClose.activeSelf, "a debug menu takeover gets its own close control back");
         check(DialogBox.Instance.TalkAllowed && GenericListUI.Instance.Rows.Single().name == "Debug", "another native menu can take over the participant list");
         GenericListUI.Instance.Close(); ParticipantMenu.Open();
         var staleApply = GenericListUI.Instance.Rows.Single(r => r.name == "Apply changes").callback;
@@ -73,8 +81,10 @@ internal static class ParticipantChecks
         Task exchange = ParticipantExchange.Start(MeetingController.Participants(), new[] { w.alice });
         check(!exchange.IsCompleted && MeetingController.Participants().Contains(w.owner) && DialogBox.Instance.Text.Contains("Hello, everyone!"),
             "newcomer gives a generated greeting before the outgoing participant leaves");
-        check(w.alice.LastTakes == -1 && w.alice.LastQuestion.Contains("did not hear") && SaveUI.Instance.IsSavingBlocked(),
-            "greetings use the full native character prompt, preserve absence context and block saving during the exchange");
+        check(w.alice.DialogGenerations == 1 && w.alice.Questions == 0 && w.alice.LastDialogCue.Contains("did not hear") && SaveUI.Instance.IsSavingBlocked(),
+            "greetings use native dialogue generation with absence context instead of the question API");
+        check(DialogBox.Instance.NativeText && DialogBox.Instance.Options.Count == 0 && DialogBox.Instance.ContinueMode && DialogBox.Instance.TalkAllowed,
+            "the greeting is a normal animated NPC dialogue turn using native Continue, not a menu message");
         Continue();
         check(DialogBox.Instance.Text.Contains("Goodbye for now.") && MeetingController.Participants().Contains(w.owner),
             "the departing NPC gives a generated farewell while still in the conversation");
@@ -82,14 +92,50 @@ internal static class ParticipantChecks
         check(MeetingController.Participants().SequenceEqual(new[] { w.alice }) && NeuralNPC.currentActiveDialogNeuralNPC == w.alice &&
             !ParticipantExchange.Busy && SaveUI.Instance.Blocks == 0 && DialogBox.Instance.TalkAllowed,
             "farewell acknowledgement removes the speaker and restores normal conversation input and saving");
-        check(w.alice.dialogElements.Any(d => d.speakerType == SpeakerType.NPC && d.contents.Contains("Goodbye for now.")) && w.owner.Questions == 1,
+        check(w.alice.dialogElements.Any(d => d.speakerType == SpeakerType.NPC && d.contents.Contains("Goodbye for now.")) && w.owner.DialogGenerations == 1,
             "the farewell is recorded for participants who heard it without generating unrelated game actions");
+        check(!w.alice.dialogElements.Concat(w.owner.dialogElements).Any(d => d.contents.Contains("Write only")),
+            "temporary greeting and farewell instructions are removed from persistent conversation history");
 
         w = world(); w.owner.Answer = () => Task.FromResult("See you later.");
         exchange = ParticipantExchange.Start(MeetingController.Participants(), Array.Empty<NeuralNPC>());
         check(DialogBox.Instance.isOpen && DialogBox.Instance.Text.Contains("See you later."), "the last NPC says farewell before the conversation closes");
         Continue(); await exchange;
         check(!DialogBox.Instance.isOpen && w.owner.Cleanups == 1 && SaveUI.Instance.Blocks == 0, "last-NPC farewell ends and unlocks the native dialogue");
+
+        w = world(); w.owner.Answer = () => Task.FromResult("One last goodbye.");
+        DialogBox.Instance.AutoFinishAnimation = false;
+        exchange = ParticipantExchange.Start(MeetingController.Participants(), Array.Empty<NeuralNPC>());
+        Continue();
+        check(!exchange.IsCompleted && DialogBox.Instance.isOpen && !DialogBox.Instance.TalkAllowed,
+            "the departing NPC cannot be removed before the native farewell animation finishes");
+        DialogBox.Instance.FinishAnimation();
+        check(DialogBox.Instance.ContinueMode && DialogBox.Instance.TalkAllowed, "native animation completion enables Continue");
+        DialogBox.Instance.StopContinueOnlyMode(); await exchange;
+        check(MeetingController.Participants().Contains(w.owner) && !ParticipantExchange.Busy && SaveUI.Instance.Blocks == 0,
+            "native Interrupt cancels remaining removals and keeps the departing NPC in the conversation");
+
+        w = world(); w.alice.transform.Position = new(1, 0);
+        SettingsUI.Instance.DialogLanguage = Language.French;
+        w.alice.Answer = () => Task.FromResult("Hello.<tool>Move away</tool>");
+        exchange = ParticipantExchange.Start(MeetingController.Participants(), new[] { w.owner, w.alice });
+        check(DialogBox.Instance.Text.Contains("Bonjour.") && w.alice.dialogElements.Any(d => d.contents == "Alice Vale: Hello.") &&
+            !w.alice.dialogElements.Any(d => d.contents.Contains("Move away")), "native formatting and translation display the greeting while storing its clean original dialogue");
+        Continue(); await exchange;
+        check(DialogBox.Instance.Text.Contains("Bonjour.") && !DialogBox.Instance.ContinueMode,
+            "the last greeting remains visible when normal conversation input returns");
+        SettingsUI.Instance.DialogLanguage = Language.English;
+
+        w = world();
+        SettingsUI.Instance.DialogLanguage = Language.French;
+        var lateTranslation = new TaskCompletionSource<string>();
+        InferenceServerSetupHandler.Instance.Translation = () => lateTranslation.Task;
+        exchange = ParticipantExchange.Start(MeetingController.Participants(), Array.Empty<NeuralNPC>());
+        ParticipantExchange.Cancel(restore: true); await exchange;
+        lateTranslation.SetResult("Late translation."); await Task.Yield();
+        check(MeetingController.Participants().Contains(w.owner) && !DialogBox.Instance.Text.Contains("Late translation") &&
+            !w.owner.dialogElements.Any(d => d.speakerType == SpeakerType.NPC), "canceling translation keeps the NPC and never publishes a late farewell");
+        SettingsUI.Instance.DialogLanguage = Language.English;
 
         w = world(); w.owner.Answer = () => Task.FromException<string>(new Exception("Model unavailable"));
         exchange = ParticipantExchange.Start(MeetingController.Participants(), Array.Empty<NeuralNPC>());

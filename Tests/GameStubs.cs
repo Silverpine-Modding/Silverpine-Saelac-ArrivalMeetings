@@ -34,11 +34,20 @@ namespace UnityEngine
     public static class Time { public static float realtimeSinceStartup => (float)(DateTime.UtcNow - DateTime.UnixEpoch).TotalSeconds; }
     public class Sprite { }
     public class Scene { public bool IsValid() => true; }
-    public class Transform { public Vector2Int Position; public Vector2Int GetVector2IntPosition() => Position; }
+    public class Transform
+    {
+        public Vector2Int Position; public Vector2Int GetVector2IntPosition() => Position;
+        public Transform? parent; public GameObject gameObject = null!;
+        public Dictionary<string, Transform> Children = new();
+        public Transform? Find(string name) => Children.GetValueOrDefault(name);
+    }
     public class GameObject
     {
         public Scene scene = new(); public bool activeInHierarchy = true, activeSelf;
         public Dictionary<Type, object> Components = new();
+        public Transform transform;
+        public GameObject() { transform = new() { gameObject = this }; }
+        public void SetActive(bool active) => activeSelf = active;
     }
     public class MonoBehaviour
     {
@@ -67,6 +76,7 @@ public class NeuralNPC : MonoBehaviour
     public int firstTalkedToPlayerTurnCount = -1, relationshipLevel;
     public Sprite? dialogNudeSprite;
     private Sprite? dialogSprite, currentExpression;
+    private string lastTranslation = "";
     private List<Sprite> expressionSprites = new();
     private int preDialogVisualDirection, preDialogRelationshipLevel, dialogTimeBias, lastTalkedToPlayerTurnCount;
     private bool metBefore;
@@ -84,6 +94,11 @@ public class NeuralNPC : MonoBehaviour
     public static void OnMultiInputCallback(NeuralNPC? nextSpeaker, string text)
     { foreach (var history in multiDialogParticipants!.Select(n => n.dialogElements).Distinct()) history.AddToDialog(SpeakerType.Player, text); }
     public Func<Task<string>> Answer = () => Task.FromResult("NONE");
+    public int DialogGenerations;
+    public string LastDialogCue = "";
+    private Task<string> Generate(bool newline) { DialogGenerations++; LastDialogCue = dialogElements.Last().contents; return Answer(); }
+    private static string RemoveToolTags(string input) => System.Text.RegularExpressions.Regex.Replace(input, @"<tool>.*?</tool>|<[^>]*>", "");
+    private string TransformTextForGenerateDialog(string text) => text.StartsWith(Name + ":") ? text : Name + ": " + text;
     public int Questions;
     public int LastTakes;
     public string LastQuestion = "";
@@ -91,13 +106,14 @@ public class NeuralNPC : MonoBehaviour
     { Questions++; LastTakes = takes; LastQuestion = question; return Answer(); }
     public static string ToAnd(List<string> list) => string.Join(" and ", list);
     public class DialogElement(SpeakerType speaker, string contents)
-    { public SpeakerType speakerType = speaker; public string contents = contents; }
+    { public SpeakerType speakerType = speaker; public string contents = contents; public string GetNamedContents() => contents; }
 }
 public static class DialogExtensions
 {
     public static void MarkNewDialog(this List<NeuralNPC.DialogElement> history)
     { history.RemoveAll(d => d.speakerType == SpeakerType.NewDialogMarker); history.Add(new(SpeakerType.NewDialogMarker, "")); }
-    public static void AddToDialog(this List<NeuralNPC.DialogElement> history, SpeakerType speaker, string text) => history.Add(new(speaker, text));
+    public static NeuralNPC.DialogElement AddToDialog(this List<NeuralNPC.DialogElement> history, SpeakerType speaker, string text)
+    { var entry = new NeuralNPC.DialogElement(speaker, text); history.Add(entry); return entry; }
 }
 public class Player : MonoBehaviour
 { public static Player Instance = new(); public bool inCombat; public string playerName = "Player"; public EntityMover entityMover; public Player() { entityMover = new(this); } }
@@ -111,12 +127,22 @@ public class DialogBox
     public Action<string>? Input;
     public List<DialogOption> Options = new();
     public int Ends;
+    public bool ContinueMode, NativeText, AutoFinishAnimation = true;
+    private Action? finished;
     public void SetNotificationMode() => isNPCDIalog = false;
-    public void DisplayText(string text, Action<string> input, List<UpperButtonOption> buttons)
-    { Text = text; Input = input; Options.Clear(); }
-    public void DisplayTextNoDialog(string text, params DialogOption[] options) { Text = text; Options = options.ToList(); }
+    public void DisplayText(string text, Action<string> input, List<UpperButtonOption> buttons, Action? finishedAnimatingCallback = null)
+    {
+        ArrivalMeetings.ParticipantExchange.ConfigureDisplay(this, ref input, ref finishedAnimatingCallback);
+        Text = text; Input = input; Options.Clear(); NativeText = true; isAnimatingText = true;
+        finished = finishedAnimatingCallback;
+        if (AutoFinishAnimation) FinishAnimation();
+    }
+    public void FinishAnimation() { isAnimatingText = false; var callback = finished; finished = null; callback?.Invoke(); }
+    public void DisplayTextNoDialog(string text, params DialogOption[] options) { Text = text; Options = options.ToList(); NativeText = false; }
     public bool IsEndDialogAllowed(NeuralNPC npc) => !npc.Locked;
-    public void StopContinueOnlyMode() { } public void SetTalkAllowedState(bool state) { TalkAllowed = state; }
+    public void StartContinueOnlyMode() => ContinueMode = true;
+    public void StopContinueOnlyMode() { ContinueMode = false; ArrivalMeetings.ParticipantExchange.OnInterrupt(); }
+    public void SetTalkAllowedState(bool state) { TalkAllowed = state; }
     public void EndDialog()
     {
         Ends++;
@@ -131,6 +157,15 @@ public class UpperButtonOption { }
 public class DialogOption(string label, Action callback, bool endDialog = true)
 { public string label = label; public Action callback = callback; }
 public static class SerializationManager { public static bool loadingSave; }
+public enum Language { English, French }
+public class SettingsUI
+{ public static SettingsUI Instance = new(); public Language DialogLanguage; public Language GetDialogLanguage() => DialogLanguage; }
+public class InferenceServerSetupHandler
+{
+    public static InferenceServerSetupHandler Instance = new();
+    public Func<Task<string>> Translation = () => Task.FromResult("Bonjour.");
+    public Task<string> Translate(string context, string speakerName, string input, Language language) => Translation();
+}
 public class DungeonGenerationManager { public static DungeonGenerationManager Instance = new(); public bool playerInInstance; }
 public class SaveUI
 { public static SaveUI Instance = new(); public bool Blocked; public int Blocks; public bool IsSavingBlocked() => Blocked || Blocks > 0; public void SetSaveBlock(bool state) => Blocks += state ? 1 : -1; }
@@ -209,6 +244,13 @@ public class ListUIItem_Generic(string name, Sprite icon, string suffix, Action 
 public class GenericListUI : MonoBehaviour
 {
     public static GenericListUI Instance = new(); public List<ListUIItem_Generic> Rows = new();
+    private GameObject instanceRoot = new();
+    public GameObject DebugClose = new() { activeSelf = true };
+    public GenericListUI()
+    {
+        instanceRoot.transform.parent = new Transform();
+        instanceRoot.transform.parent.Children["SaltExtraDebug_CloseButton"] = DebugClose.transform;
+    }
     public void Draw(IEnumerable<ListUIItem_Generic> rows) { ArrivalMeetings.TravelMenu.OnNativeDraw(this); ArrivalMeetings.ParticipantMenu.OnNativeDraw(this); Rows = rows.ToList(); }
     public void Open() => gameObject.activeSelf = true;
     public void Close() { gameObject.activeSelf = false; ArrivalMeetings.TravelMenu.OnNativeClose(this); ArrivalMeetings.ParticipantMenu.OnNativeClose(this); }

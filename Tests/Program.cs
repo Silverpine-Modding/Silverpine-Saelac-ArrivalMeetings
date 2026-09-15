@@ -31,6 +31,8 @@ NeuralNPC Make(NPCName id, string name, int x)
     DialogBox.Instance = new DialogBox();
     GenericListUI.Instance = new GenericListUI();
     SaveUI.Instance = new SaveUI();
+    SettingsUI.Instance = new SettingsUI();
+    InferenceServerSetupHandler.Instance = new InferenceServerSetupHandler();
     BlackScreen.Instance = new BlackScreen();
     MapZone.Reset();
     Plot.allPlots.Clear();
@@ -240,4 +242,13 @@ Check(Type("GenericListUI").Methods.Any(m => m.Name == "Draw" && m.Parameters.Co
 Check(Type("DialogBox").Fields.Any(f => f.Name == "isNPCDIalog"), "native NPC dialogue mode flag exists");
 Check(Type("NeuralNPC").Methods.Any(m => m.Name == "DisplayMultiDialogText" && m.IsStatic && m.Parameters.Count == 3) &&
     Type("NeuralNPC").Methods.Any(m => m.Name == "DisplayDialogText" && m.Parameters.Count == 1), "native portrait and input refresh methods exist");
+Check(Type("NeuralNPC").Methods.Any(m => m.Name == "Generate" && m.Parameters.Count == 1 && m.Parameters[0].ParameterType.FullName == "System.Boolean" &&
+    m.ReturnType.FullName == "System.Threading.Tasks.Task`1<System.String>"), "native dialogue generator returns the expected string task");
+Check(Type("NeuralNPC").Methods.Any(m => m.Name == "RemoveToolTags" && m.IsStatic && m.Parameters.Count == 1) &&
+    Type("NeuralNPC").Methods.Any(m => m.Name == "TransformTextForGenerateDialog" && m.Parameters.Count == 1) &&
+    Type("NeuralNPC").Fields.Any(f => f.Name == "lastTranslation"), "native dialogue formatting and translation storage exist");
+Check(Type("DialogBox").Methods.Any(m => m.Name == "StartContinueOnlyMode" && m.Parameters.Count == 0) &&
+    Type("DialogBox").Methods.Any(m => m.Name == "StopContinueOnlyMode" && m.Parameters.Count == 0), "native Continue and Interrupt integration points exist");
+Check(Type("GenericListUI").Fields.Any(f => f.Name == "instanceRoot" && f.FieldType.FullName == "UnityEngine.GameObject"),
+    "shared list content root used to scope the debug X suppression exists");
 Console.WriteLine($"{passed} checks passed. Unity rendering, live model intent quality, and live dialogue transitions still require an in-game smoke test.");

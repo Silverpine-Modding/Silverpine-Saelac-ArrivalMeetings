@@ -18,6 +18,7 @@ internal sealed class ParticipantMenu
     private readonly Vector2Int origin = Player.Instance.transform.GetVector2IntPosition();
     private readonly List<NeuralNPC> original = MeetingController.Participants();
     private readonly HashSet<NeuralNPC> selected;
+    private readonly ListMenuChrome chrome = new();
     private int page;
 
     private ParticipantMenu() => selected = new HashSet<NeuralNPC>(original);
@@ -85,7 +86,7 @@ internal sealed class ParticipantMenu
         if ((page + 1) * PageSize < choices.Count) rows.Add(Row("Next page", () => { page++; Show(); }));
         rows.Add(Row("Cancel / return to conversation", () => Cancel()));
         drawing = true;
-        try { list.Draw(rows); list.Open(); }
+        try { list.Draw(rows); chrome.HideDebugClose(list); list.Open(); }
         finally { drawing = false; }
     }
 
@@ -93,6 +94,7 @@ internal sealed class ParticipantMenu
     {
         active = null;
         list.Close();
+        chrome.Restore();
         try
         {
             await ParticipantExchange.Start(original, selected);
@@ -111,6 +113,7 @@ internal sealed class ParticipantMenu
         if (menu == null) return;
         active = null;
         if (closeList && menu.list != null) menu.list.Close();
+        menu.chrome.Restore();
         if (restoreConversation && menu.revision == MeetingController.ConversationRevision && menu.box == DialogBox.Instance &&
             menu.box.isOpen && !NeuralNPC.npcFunctionsBeingInvoked && !SaveUI.Instance.IsSavingBlocked()) menu.box.SetTalkAllowedState(true);
     }

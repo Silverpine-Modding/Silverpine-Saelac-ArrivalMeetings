@@ -1,4 +1,4 @@
-# Arrival Meetings 1.2.0
+# Arrival Meetings 1.2.1
 
 [Download the latest release](https://github.com/Silverpine-Modding/Silverpine-Saelac-ArrivalMeetings/releases/latest)
 
@@ -24,20 +24,27 @@ Open **Participants** in the conversation action menu. This is separate from
 - Choose **Apply changes** to begin the greetings and farewells, or **Cancel**
   to leave the conversation unchanged.
 
+The Participants button and native list window remain in place. The selection
+window uses its **Cancel** row; the black X left behind by Salt Extra Debug is
+hidden while this mod owns the list. Travel uses the same handling.
+
 Nearby uses the same range as the existing conversation picker: within two
 tiles horizontally and vertically of the player or current speaker, and visible
 to the current speaker. Inviting someone does not teleport them, require a free
 tile, or count against the arrival-specific guest cap.
 
-Each newcomer gives a short, generated greeting using their full native character
-and memory context. Each departing NPC gives a generated farewell while still
-in the conversation. Use **Continue** to read each line before the next change.
+Each newcomer gives a short greeting through the game's dialogue generator,
+using their character and memory context. Each departing NPC gives a farewell
+while still in the conversation. These are normal NPC dialogue turns, with the
+native portrait, text formatting, animation and configured dialogue translation.
+Use the normal **Continue** control after reading each line before the next change.
 Removing everyone is labeled **Apply changes — end conversation**; the last
 farewell finishes before the game closes the dialogue.
 
-**Cancel remaining changes** stops an exchange, including while waiting for the
-model. Already completed changes remain in place. If generation fails, the menu
-explains this and lets you continue the change without inventing dialogue.
+Use **Interrupt** while reading a greeting or farewell to stop the remaining
+changes. The waiting screen also offers **Cancel remaining changes**. Already
+completed changes remain in place. If generation fails, an explanatory message
+lets you continue the change without inventing dialogue.
 These short turns use the existing model connection and do not invoke game actions.
 
 Removing the displayed speaker switches to a remaining participant. Departed

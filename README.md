@@ -182,7 +182,7 @@ Requires BepInEx 5, Silverpine 1.7.3, and
 [**Modding Tools 1.9.3 or newer**](https://github.com/Silverpine-Modding/Silverpine-Saelac-Modding-Tools/releases)
 (developed against installed 1.10.2).
 
-Download `ArrivalMeetings-1.2.0.zip` from the release page, close Silverpine, and
+Download `ArrivalMeetings-1.2.1.zip` from the release page, close Silverpine, and
 extract its `ArrivalMeetings` folder into `BepInEx/plugins/`. Alternatively, place
 the standalone `ArrivalMeetings.dll` and this README under:
 
@@ -192,7 +192,7 @@ BepInEx/plugins/ArrivalMeetings/
 
 Keep the single existing Modding Tools installation. This release does not
 bundle another framework DLL, game DLL, or BepInEx DLL. Start/restart Silverpine
-to load the plugin. Its BepInEx log entry is **Arrival Meetings 1.2.0 loaded**.
+to load the plugin. Its BepInEx log entry is **Arrival Meetings 1.2.1 loaded**.
 
 Configuration is created on first startup at:
 
